@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<strings>
+    <string id="200">An error occurred while communication with delfi.</string>
+    <string id="201">The error message is:</string>
+    <string id="202">Probably no Live TV at the moment.</string>
+    <!-- settings -->
+    <string id="30002">General</string>
+    <string id="30003">Portal</string>
+    <string id="30004">HD quality (if possible)</string>
+</strings>

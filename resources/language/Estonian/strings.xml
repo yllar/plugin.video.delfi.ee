@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<strings>
+    <string id="200">Delfiga suhtlemisel ilmnes tõrge.</string>
+    <string id="201">Veateade:</string>
+    <string id="202">Ilmselt pole praegu ühtegi Live ülekannet.</string>
+    <!-- seaded -->
+    <string id="30002">Üldine</string>
+    <string id="30003">Portaal</string>
+    <string id="30004">Kõrge kvaliteet (võimalusel)</string>
+</strings>
