@@ -1,0 +1,6 @@
+[B]Version 0.0.2[/B]
+- Support multiple live setreams / Mitme Live TV voo tugi
+- Unicode error messages / Unicode veateated
+- Fixed video name in Now Playing list / Hetkel mängib nimekirjas näidatakse vide õiget nime
+[B]Version 0.0.1[/B]
+- Initial release / Esmane väljalase

@@ -22,6 +22,7 @@
 import re
 import os
 import sys
+import urllib
 import urllib2
 import urlparse
 from xml.etree import ElementTree
@@ -66,7 +67,7 @@ class Delfi(object):
 
     html = self.downloadUrl(url)
     if not html:
-      raise DelfiException(ADDON.getLocalizedString(200))
+      raise DelfiException(ADDON.getLocalizedString(200).encode('utf-8'))
 
     if MAIN_URL == 'delfi.ee':
       regex = '.*drawCategories\(\'([^\']+).*span>([^<]+)'
@@ -86,32 +87,49 @@ class Delfi(object):
     xbmcplugin.addDirectoryItems(HANDLE, items)
     xbmcplugin.endOfDirectory(HANDLE)
 
-  def playLiveStream(self):
+  def getLiveStreams(self):
     url = 'http://' + MAIN_URL
     buggalo.addExtraData('url', url)
     html = self.downloadUrl(url)
-    if html:
-      #hqs = 'rtmp://ajisaka.ml.ee:1935/delfi',
-      hdurl = re.search('hqs = \'([^\']+).*([^\']+),', html, re.DOTALL)
-      sdurl = re.search('s = \'([^\']+).*([^\']+),', html, re.DOTALL)
-      #hqn = 'event2',
-      hdevent = re.search('hqn = \'([^\']+).*([^\']+),', html, re.DOTALL)
-      sdevent = re.search('sn = \'([^\']+).*([^\']+),', html, re.DOTALL)
-    else:
-      raise DelfiException(ADDON.getLocalizedString(200))
-      
-    if hdurl is None:
-      raise DelfiException(ADDON.getLocalizedString(202))
-    else:
+    if not html:
+      raise DelfiException(ADDON.getLocalizedString(200).encode('utf-8'))
+    
+    stream_name = list() # Stream name
+    stream_lq = list() # Low quality stream
+    stream_hq = list() # High quality stream
+    stream_lu = list() # Low quality stream url
+    stream_hu = list() # High quality stream url
+    items = list()
+    for m in re.findall('<div>([^<]+)</div>',html, re.DOTALL):
+      stream_name.append(m)
+    for loq in re.findall('\ssn = \'([^\']+)\'', html ,re.DOTALL):
+      stream_lq.append(loq)
+    for hiq in re.findall('\shqn = \'([^\']+)\'', html ,re.DOTALL):
+      stream_hq.append(hiq)
+    for lurl in re.findall('\ss = \'([^\']+)\'', html ,re.DOTALL):
+      stream_lu.append(lurl)
+    for hurl in re.findall('\shqs = \'([^\']+)\'', html ,re.DOTALL):
+      stream_hu.append(hurl)
+  
+    while len(stream_name) > 0:
       if __settings__.getSetting('hd'):
-	stream = hdurl.group(1) + '/' + hdevent.group(1)
+	streamurl = "%s/%s" % (stream_hu.pop(0), stream_hq.pop(0))
       else:
-	stream = sdurl.group(1) + '/' + sdevent.group(1)
-      
-      playlist = xbmc.PlayList(xbmc.PLAYLIST_VIDEO)
-      playlist.clear()
-      playlist.add(stream)
-      xbmc.Player().play(stream)
+	streamurl = "%s/%s" % (stream_lu.pop(0), stream_lq.pop(0))
+	
+      item = xbmcgui.ListItem(stream_name.pop(0),iconImage=FANART)
+      item.setProperty('Fanart_Image', FANART)
+      items.append((PATH + '?category=live&url=%s' % streamurl, item, True))
+    xbmcplugin.addDirectoryItems(HANDLE, items)
+    xbmcplugin.endOfDirectory(HANDLE)
+    
+  def playLiveStream(self,streamurl):
+    buggalo.addExtraData('url', streamurl)
+
+    playlist = xbmc.PlayList(xbmc.PLAYLIST_VIDEO)
+    playlist.clear()
+    playlist.add(streamurl)
+    xbmc.Player().play(streamurl)
 
   def listVideos(self,categoryId):
       
@@ -119,7 +137,7 @@ class Delfi(object):
     buggalo.addExtraData('url', url)
     xmlData = self.downloadUrl(url)
     if not xmlData:
-      raise DelfiException(ADDON.getLocalizedString(203))
+      raise DelfiException(ADDON.getLocalizedString(203).encode('utf-8'))
     
     try:
       doc = ElementTree.fromstring(xmlData.replace('&', '&amp;'))
@@ -150,11 +168,11 @@ class Delfi(object):
       item.setInfo('video', infoLabels)
       item.setProperty('IsPlayable', 'true')
       item.setProperty('Fanart_Image', fanart)
-      items.append((PATH + '?play=%s' % videoid,item))
+      items.append((PATH + '?play=%s&title=%s' % (videoid,urllib.quote_plus(title.replace("'","\'").encode('utf-8'))),item))
     xbmcplugin.addDirectoryItems(HANDLE, items)
     xbmcplugin.endOfDirectory(HANDLE)    
 
-  def playItem(self,item):
+  def playItem(self,item,title):
     if __settings__.getSetting('country') == "delfi.lv":
       prefix = 'yv'
     else:
@@ -163,15 +181,15 @@ class Delfi(object):
     buggalo.addExtraData('url',url)
     playlist = xbmc.PlayList(xbmc.PLAYLIST_VIDEO)
     playlist.clear()
-    item = xbmcgui.ListItem('Nimi', iconImage = ICON, path = url) # TODO: replace Nimi with the real name 
+    item = xbmcgui.ListItem(urllib.unquote_plus(title), iconImage = ICON, path = url) # TODO: replace Nimi with the real name 
     playlist.add(url,item)
     firstItem = item
     xbmcplugin.setResolvedUrl(HANDLE, True, item)
  
   def displayError(self, message = 'n/a'):
     heading = buggalo.getRandomHeading()
-    line1 = ADDON.getLocalizedString(200)
-    line2 = ADDON.getLocalizedString(201)
+    line1 = ADDON.getLocalizedString(200).encode('utf-8')
+    line2 = ADDON.getLocalizedString(201).encode('utf-8')
     xbmcgui.Dialog().ok(heading, line1, line2, message)
     
 if __name__ == '__main__':
@@ -192,12 +210,14 @@ if __name__ == '__main__':
   
   DelfiAddon = Delfi()
   try:
-    if PARAMS.has_key('category') and PARAMS['category'][0] == 'live':
-      DelfiAddon.playLiveStream()
+    if PARAMS.has_key('category') and PARAMS['category'][0] == 'live' and PARAMS.has_key('url'):
+      DelfiAddon.playLiveStream(PARAMS['url'][0])
+    elif PARAMS.has_key('category') and PARAMS['category'][0] == 'live':
+      DelfiAddon.getLiveStreams()
     elif PARAMS.has_key('category'):
       DelfiAddon.listVideos(PARAMS['category'][0])
     elif PARAMS.has_key('play'):
-      DelfiAddon.playItem(PARAMS['play'][0])
+      DelfiAddon.playItem(PARAMS['play'][0],PARAMS['title'][0])
     else:
       DelfiAddon.listChannels()
       
