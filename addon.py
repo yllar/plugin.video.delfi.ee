@@ -25,8 +25,7 @@ import sys
 import urllib
 import urllib2
 import urlparse
-from xml.etree import ElementTree
-
+import locale
 
 import xbmc
 import xbmcgui
@@ -35,14 +34,19 @@ import xbmcplugin
 
 import buggalo
 
-__settings__  = xbmcaddon.Addon(id='plugin.video.delfi.ee')
+try:
+  locale.setlocale(locale.LC_ALL, 'et_EE.UTF-8')
+except locale.Error:
+  locale.setlocale(locale.LC_ALL, 'C')
 
-MAIN_URL = __settings__.getSetting('country')
+__settings__  = xbmcaddon.Addon(id='plugin.video.delfi.ee')
 
 #show settings on first run so user could change portal and quality
 if ( not __settings__.getSetting( "firstrun" ) ):
   __settings__.openSettings()
   __settings__.setSetting( "firstrun", '1' )
+
+MAIN_URL = __settings__.getSetting('country')
 
 class DelfiException(Exception):
   pass
@@ -69,11 +73,13 @@ class Delfi(object):
     if not html:
       raise DelfiException(ADDON.getLocalizedString(200).encode('utf-8'))
 
+    html = html.replace('</li>','</li>\r\n')
+
     if MAIN_URL == 'delfi.ee':
-      regex = '.*drawCategories\(\'([^\']+).*span>([^<]+)'
-      item = xbmcgui.ListItem('Live TV', iconImage=FANART)
+      regex = '.*href="/([^\/]+)/".*class=\"header-navi-link\">([^<]+)<.*'
+      item = xbmcgui.ListItem(ADDON.getLocalizedString(30006).encode('utf-8'), iconImage=FANART)
       item.setProperty('Fanart_Image', FANART)
-      items.append((PATH + '?category=%s' % 'live', item, True))
+      items.append((PATH + '?category=%s' % 'live/vaatajargi', item, True))
     elif MAIN_URL == 'delfi.lv':
       regex = '.*category\/([^/]+).*>([^<]+)<span.*'
     elif MAIN_URL == 'delfi.lt':
@@ -92,7 +98,7 @@ class Delfi(object):
     buggalo.addExtraData('url', url)
     html = self.downloadUrl(url)
     if not html:
-      raise DelfiException(ADDON.getLocalizedString(200).encode('utf-8'))
+      raise DelfiException(ADDON.getLocalizedString(202).encode('utf-8'))
     
     stream_name = list() # Stream name
     stream_lq = list() # Low quality stream
@@ -110,7 +116,15 @@ class Delfi(object):
       stream_lu.append(lurl)
     for hurl in re.findall('\shqs = \'([^\']+)\'', html ,re.DOTALL):
       stream_hu.append(hurl)
-  
+
+    # try to fall back sd if hd url is not available and vice versa
+    if not stream_hu and not stream_lu:
+      raise DelfiException(ADDON.getLocalizedString(30005).encode('utf-8'))
+    if not stream_hu:
+      stream_hu = stream_lu
+    if not stream_lu:
+      stream_lu = stream_hu
+      
     while len(stream_name) > 0:
       if __settings__.getSetting('hd'):
 	streamurl = "%s/%s" % (stream_hu.pop(0), stream_hq.pop(0))
@@ -133,30 +147,23 @@ class Delfi(object):
 
   def listVideos(self,categoryId):
       
-    url = 'http://tv.%s/categoryxml/%s/?type=xml&order=date' % (MAIN_URL, categoryId)
+    url = 'http://tv.%s/%s/' % (MAIN_URL, categoryId)
     buggalo.addExtraData('url', url)
-    xmlData = self.downloadUrl(url)
-    if not xmlData:
+    html = self.downloadUrl(url)
+    if not html:
       raise DelfiException(ADDON.getLocalizedString(203).encode('utf-8'))
-    
-    try:
-      doc = ElementTree.fromstring(xmlData.replace('&', '&amp;'))
-      doc = ElementTree.fromstring(xmlData.encode('utf-8'))
-    except Exception, ex:
-      raise DelfiException(str(MAIN_URL))
 
     items = list()
-    group = doc.findall("videos")
-    for node in group:
-      title = node.get('title')
-      url = node.get('url')
-      image = node.get('image').replace('.s.','.')
-      comments = node.get('comments')
-      vid = re.search('.*/([^/]+)/',url,re.DOTALL)
-      videoid = vid.group(1)
+    imgurl = 'http://tv.%s' % MAIN_URL
+    html = html.replace('</div></div></div>','</div></div></div>\r\n')
+    regex = 'video-title".*href="([^"]+)">([^<]+)<.*mg src="([^"]+)"'
+    for node in re.finditer(regex,html):
+      title = node.group(2)
+      url = node.group(1)
+      image = imgurl + node.group(3)
+      videoid = node.group(1)
       infoLabels = {
-	'title': title,
-	'rating': comments
+	'title': title
       }
       
       if image:
@@ -168,20 +175,31 @@ class Delfi(object):
       item.setInfo('video', infoLabels)
       item.setProperty('IsPlayable', 'true')
       item.setProperty('Fanart_Image', fanart)
-      items.append((PATH + '?play=%s&title=%s' % (videoid,urllib.quote_plus(title.replace("'","\'").encode('utf-8'))),item))
+      items.append((PATH + '?play=%s&title=%s' % (videoid,urllib.quote_plus(title.replace("'","\'"))),item))
+    del items[-1]
+    del items[-1]
     xbmcplugin.addDirectoryItems(HANDLE, items)
     xbmcplugin.endOfDirectory(HANDLE)    
 
+  def getVideo(self,url):
+    html = self.downloadUrl(url)
+    if not html:
+      raise DelfiException(ADDON.getLocalizedString(200).encode('utf-8'))
+    # <link rel="video_src" href="http://vodhttp.nh.ee/P/PRMkOb8P/v720.mp4"/>
+    regex = 'rel="video_src" href="([^"]+)"'
+    for line in re.finditer(regex,html):
+      return line.group(1)
+    
   def playItem(self,item,title):
-    if __settings__.getSetting('country') == "delfi.lv":
+    """if __settings__.getSetting('country') == "delfi.lv":
       prefix = 'yv'
     else:
-      prefix = 'ytv'
-    url = 'http://%s.%s/v/%s.mp4' % (prefix,MAIN_URL,item)
+      prefix = 'ytv' """
+    url = DelfiAddon.getVideo(item)
     buggalo.addExtraData('url',url)
     playlist = xbmc.PlayList(xbmc.PLAYLIST_VIDEO)
     playlist.clear()
-    item = xbmcgui.ListItem(urllib.unquote_plus(title), iconImage = ICON, path = url) # TODO: replace Nimi with the real name 
+    item = xbmcgui.ListItem(urllib.unquote_plus(title), iconImage = ICON, path = url)
     playlist.add(url,item)
     firstItem = item
     xbmcplugin.setResolvedUrl(HANDLE, True, item)

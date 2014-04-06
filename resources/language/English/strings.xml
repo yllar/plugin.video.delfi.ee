@@ -3,6 +3,8 @@
     <string id="200">An error occurred while communication with delfi.</string>
     <string id="201">The error message is:</string>
     <string id="202">Probably no Live TV at the moment.</string>
+    <string id="30005">Failed to detect stream url.</string>
+    <string id="30006">L!VE recordings</string>
     <!-- settings -->
     <string id="30002">General</string>
     <string id="30003">Portal</string>
