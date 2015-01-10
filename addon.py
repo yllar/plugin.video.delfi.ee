@@ -1,8 +1,8 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-#      Copyright (C) 2012 Yllar Pajus
-#      http://loru.mine.nu
+#      Copyright (C) 2015 Yllar Pajus
+#      http://ku.uk.is
 #
 #  This Program is free software; you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -26,6 +26,7 @@ import urllib
 import urllib2
 import urlparse
 import locale
+import json
 
 import xbmc
 import xbmcgui
@@ -100,38 +101,33 @@ class Delfi(object):
     if not html:
       raise DelfiException(ADDON.getLocalizedString(202).encode('utf-8'))
     
-    stream_name = list() # Stream name
-    stream_lq = list() # Low quality stream
-    stream_hq = list() # High quality stream
-    stream_lu = list() # Low quality stream url
-    stream_hu = list() # High quality stream url
     items = list()
-    for m in re.findall('<div>([^<]+)</div>',html, re.DOTALL):
-      stream_name.append(m)
-    for loq in re.findall('\ssn = \'([^\']+)\'', html ,re.DOTALL):
-      stream_lq.append(loq)
-    for hiq in re.findall('\shqn = \'([^\']+)\'', html ,re.DOTALL):
-      stream_hq.append(hiq)
-    for lurl in re.findall('\ss = \'([^\']+)\'', html ,re.DOTALL):
-      stream_lu.append(lurl)
-    for hurl in re.findall('\shqs = \'([^\']+)\'', html ,re.DOTALL):
-      stream_hu.append(hurl)
 
-    # try to fall back sd if hd url is not available and vice versa
-    if not stream_hu and not stream_lu:
-      raise DelfiException(ADDON.getLocalizedString(30005).encode('utf-8'))
-    if not stream_hu:
-      stream_hu = stream_lu
-    if not stream_lu:
-      stream_lu = stream_hu
+    for m in re.findall('loader.php#stream=([^\"]+)&',html, re.DOTALL):
+      data = json.loads(urllib.unquote(m))
+      title = data['title']
+      stream_hu = ''
+      stream_lu = ''
+      for streams in data['versions']:
+        if streams['caption'] == "HQ":
+          stream_hu = data['rtmp'] + streams['flash']
+        if streams['caption'] == "LQ":
+          stream_lu = data['rtmp'] + streams['flash']
+
+      # try to fall back sd if hd url is not available and vice versa
+      if not stream_hu and not stream_lu:
+        raise DelfiException(ADDON.getLocalizedString(30005).encode('utf-8'))
+      if not stream_hu:
+        stream_hu = stream_lu
+      if not stream_lu:
+        stream_lu = stream_hu
       
-    while len(stream_name) > 0:
       if __settings__.getSetting('hd'):
-	streamurl = "%s/%s" % (stream_hu.pop(0), stream_hq.pop(0))
+        streamurl = stream_hu
       else:
-	streamurl = "%s/%s" % (stream_lu.pop(0), stream_lq.pop(0))
+        streamurl = stream_lu
 	
-      item = xbmcgui.ListItem(stream_name.pop(0),iconImage=FANART)
+      item = xbmcgui.ListItem(title,iconImage=FANART)
       item.setProperty('Fanart_Image', FANART)
       items.append((PATH + '?category=live&url=%s' % streamurl, item, True))
     xbmcplugin.addDirectoryItems(HANDLE, items)
@@ -224,7 +220,7 @@ if __name__ == '__main__':
     os.makedirs(CACHE_PATH)
     
 
-  buggalo.SUBMIT_URL = 'http://loru.mine.nu/exception/submit.php'
+  buggalo.SUBMIT_URL = 'http://ku.uk.is/exception/submit.php'
   
   DelfiAddon = Delfi()
   try:
