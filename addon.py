@@ -220,7 +220,7 @@ if __name__ == '__main__':
     os.makedirs(CACHE_PATH)
     
 
-  buggalo.SUBMIT_URL = 'http://ku.uk.is/exception/submit.php'
+  buggalo.SUBMIT_URL = 'https://pilves.eu/exception/submit.php'
   
   DelfiAddon = Delfi()
   try:
