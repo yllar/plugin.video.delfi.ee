@@ -103,7 +103,7 @@ class Delfi(object):
     
     items = list()
 
-    for m in re.findall('loader.php#stream=([^\"]+)&',html, re.DOTALL):
+    for m in re.findall('loader.php.*#stream=([^\"]+)&',html, re.DOTALL):
       data = json.loads(urllib.unquote(m))
       title = data['title']
       stream_hu = ''
