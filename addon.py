@@ -181,11 +181,12 @@ class Delfi(object):
     html = self.downloadUrl(url)
     if not html:
       raise DelfiException(ADDON.getLocalizedString(200).encode('utf-8'))
-    # <link rel="video_src" href="http://vodhttp.nh.ee/P/PRMkOb8P/v720.mp4"/>
-    regex = 'rel="video_src" href="([^"]+)"'
+
+    regex = 'class="dvideo-container-(\w+)"'
     for line in re.finditer(regex,html):
-      return line.group(1)
-    
+      id = line.group(1)
+      return 'http://vodrtmp.nh.ee/delfivod/_definst_/%s/%s/smil:stream.smil/playlist.m3u8' % (id[0], id)
+
   def playItem(self,item,title):
     """if __settings__.getSetting('country') == "delfi.lv":
       prefix = 'yv'
