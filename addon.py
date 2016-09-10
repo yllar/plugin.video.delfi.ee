@@ -1,8 +1,8 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-#      Copyright (C) 2015 Yllar Pajus
-#      http://ku.uk.is
+#      Copyright (C) 2016 Yllar Pajus
+#      http://yllar.eu
 #
 #  This Program is free software; you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -67,7 +67,7 @@ class Delfi(object):
 	  raise DelfiException(ex)
 
   def listChannels(self):
-    url = 'http://tv.%s' % MAIN_URL
+    url = 'http://tv.%s/saated/' % MAIN_URL
     items = list()
 
     html = self.downloadUrl(url)
@@ -76,21 +76,18 @@ class Delfi(object):
 
     html = html.replace('</li>','</li>\r\n')
 
-    if MAIN_URL == 'delfi.ee':
-      regex = '.*href="/([^\/]+)/".*class=\"header-navi-link\">([^<]+)<.*'
-      item = xbmcgui.ListItem(ADDON.getLocalizedString(30006).encode('utf-8'), iconImage=FANART)
-      item.setProperty('Fanart_Image', FANART)
-      items.append((PATH + '?category=%s' % 'live/vaatajargi', item, True))
-    elif MAIN_URL == 'delfi.lv':
-      regex = '.*category\/([^/]+).*>([^<]+)<span.*'
-    elif MAIN_URL == 'delfi.lt':
-      #<li><a href="category/59/" class="">Pilietis TV</a></li>
-      regex = '.*category\/([^/]+).*class="">([^<]+)<\/a.*'
+    regex = '\s<a href="/saated/([^\/]+).">([^<]+)</a>'
+    item = xbmcgui.ListItem(ADDON.getLocalizedString(30007).encode('utf-8'), iconImage=FANART)
+    item.setProperty('Fanart_Image', FANART)
+    items.append((PATH + '?category=%s' % 'live', item, True))
+    item = xbmcgui.ListItem(ADDON.getLocalizedString(30006).encode('utf-8'), iconImage=FANART)
+    item.setProperty('Fanart_Image', FANART)
+    items.append((PATH + '?category=%s&page=1' % 'live/sport', item, True))
 
     for m in re.finditer(regex,html):
       item = xbmcgui.ListItem(m.group(2), iconImage=FANART)
       item.setProperty('Fanart_Image', FANART)
-      items.append((PATH + '?category=%s' % m.group(1), item, True))
+      items.append((PATH + '?category=%s&page=1' % m.group(1), item, True))
     xbmcplugin.addDirectoryItems(HANDLE, items)
     xbmcplugin.endOfDirectory(HANDLE)
 
@@ -141,23 +138,25 @@ class Delfi(object):
     playlist.add(streamurl)
     xbmc.Player().play(streamurl)
 
-  def listVideos(self,categoryId):
-      
-    url = 'http://tv.%s/%s/' % (MAIN_URL, categoryId)
+  def listVideos(self,categoryId,page):
+    
+    if "live/" in categoryId:
+      url = 'http://tv.%s/%s/?page=%s' % (MAIN_URL, categoryId,page)
+    else:
+      url = 'http://tv.%s/saated/%s/?page=%s' % (MAIN_URL, categoryId,page)
     buggalo.addExtraData('url', url)
     html = self.downloadUrl(url)
     if not html:
       raise DelfiException(ADDON.getLocalizedString(203).encode('utf-8'))
 
     items = list()
-    imgurl = 'http://tv.%s' % MAIN_URL
     html = html.replace('</div></div></div>','</div></div></div>\r\n')
-    regex = 'video-title".*href="([^"]+)">([^<]+)<.*mg src="([^"]+)"'
+    regex= 'img class="responsive" src="([^"]+)".*c-block-art-title.*href="([^"]+)">([^<]+)</a'
     for node in re.finditer(regex,html):
-      title = node.group(2)
-      url = node.group(1)
-      image = imgurl + node.group(3)
-      videoid = node.group(1)
+      title = node.group(3)
+      url = node.group(2)
+      image = node.group(1)
+      videoid = node.group(2)
       infoLabels = {
 	'title': title
       }
@@ -172,8 +171,17 @@ class Delfi(object):
       item.setProperty('IsPlayable', 'true')
       item.setProperty('Fanart_Image', fanart)
       items.append((PATH + '?play=%s&title=%s' % (videoid,urllib.quote_plus(title.replace("'","\'"))),item))
-    del items[-1]
-    del items[-1]
+    try:
+      pagex = '<a class="item item-next.*href="([^"]+)"'
+      pagination = re.search(pagex,html)
+      if pagination:
+        if pagination.group(1) != "javascript:void(0)":
+          item = xbmcgui.ListItem(ADDON.getLocalizedString(30008).encode('utf-8'), iconImage = fanart)
+          item.setProperty('IsPlayable', 'true')
+          item.setProperty('Fanart_Image', fanart)
+          items.append((PATH + '?category=%s&%s' % (categoryId,pagination.group(1).replace('?','')),item,True))
+    except:
+      pass
     xbmcplugin.addDirectoryItems(HANDLE, items)
     xbmcplugin.endOfDirectory(HANDLE)    
 
@@ -188,10 +196,6 @@ class Delfi(object):
       return 'http://vodrtmp.nh.ee/delfivod/_definst_/%s/%s/smil:stream.smil/playlist.m3u8' % (id[0], id)
 
   def playItem(self,item,title):
-    """if __settings__.getSetting('country') == "delfi.lv":
-      prefix = 'yv'
-    else:
-      prefix = 'ytv' """
     url = DelfiAddon.getVideo(item)
     buggalo.addExtraData('url',url)
     playlist = xbmc.PlayList(xbmc.PLAYLIST_VIDEO)
@@ -230,7 +234,7 @@ if __name__ == '__main__':
     elif PARAMS.has_key('category') and PARAMS['category'][0] == 'live':
       DelfiAddon.getLiveStreams()
     elif PARAMS.has_key('category'):
-      DelfiAddon.listVideos(PARAMS['category'][0])
+      DelfiAddon.listVideos(PARAMS['category'][0],PARAMS['page'][0])
     elif PARAMS.has_key('play'):
       DelfiAddon.playItem(PARAMS['play'][0],PARAMS['title'][0])
     else:
