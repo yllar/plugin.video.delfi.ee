@@ -27,6 +27,7 @@ import urllib2
 import urlparse
 import locale
 import json
+from bs4 import BeautifulSoup
 
 import xbmc
 import xbmcgui
@@ -92,37 +93,45 @@ class Delfi(object):
     xbmcplugin.endOfDirectory(HANDLE)
 
   def getLiveStreams(self):
-    url = 'http://' + MAIN_URL
+    url = 'http://tv.delfi.ee/live'
     buggalo.addExtraData('url', url)
-    html = self.downloadUrl(url)
+    html = BeautifulSoup(self.downloadUrl(url), 'html.parser')
     if not html:
       raise DelfiException(ADDON.getLocalizedString(202).encode('utf-8'))
     
     items = list()
+    live_urls = list()
+    urlid = html.find_all(class_="dvideo_container")
+    for url in urlid:
+      stream_url = url.find_all('iframe', {"data-src":True})
+      for stream in stream_url:
+        if stream:
+          live_urls.append(stream['data-src'].replace("//","https://"))
+    for live_url in live_urls:
+      html = self.downloadUrl(live_url)
+      for m in re.findall('#stream=([^\"]+)&',html, re.DOTALL):
+        data = json.loads(urllib.unquote(m))
+        title = data['title'].replace('+', ' ')
+        stream_hu = ''
+        stream_lu = ''
+        for streams in data['versions']:
+          if streams['caption'] == "HQ":
+            stream_hu = data['rtmp'] + streams['flash']
+          if streams['caption'] == "LQ":
+            stream_lu = data['rtmp'] + streams['flash']
 
-    for m in re.findall('#stream=([^\"]+)&',html, re.DOTALL):
-      data = json.loads(urllib.unquote(m))
-      title = data['title'].replace('+', ' ')
-      stream_hu = ''
-      stream_lu = ''
-      for streams in data['versions']:
-        if streams['caption'] == "HQ":
-          stream_hu = data['rtmp'] + streams['flash']
-        if streams['caption'] == "LQ":
-          stream_lu = data['rtmp'] + streams['flash']
-
-      # try to fall back sd if hd url is not available and vice versa
-      if not stream_hu and not stream_lu:
-        raise DelfiException(ADDON.getLocalizedString(30005).encode('utf-8'))
-      if not stream_hu:
-        stream_hu = stream_lu
-      if not stream_lu:
-        stream_lu = stream_hu
+        # try to fall back sd if hd url is not available and vice versa
+        if not stream_hu and not stream_lu:
+          raise DelfiException(ADDON.getLocalizedString(30005).encode('utf-8'))
+        if not stream_hu:
+          stream_hu = stream_lu
+        if not stream_lu:
+          stream_lu = stream_hu
       
-      if __settings__.getSetting('hd'):
-        streamurl = stream_hu
-      else:
-        streamurl = stream_lu
+        if __settings__.getSetting('hd'):
+          streamurl = stream_hu
+        else:
+          streamurl = stream_lu
 	
       item = xbmcgui.ListItem(title,iconImage=FANART)
       item.setProperty('Fanart_Image', FANART)
@@ -190,7 +199,7 @@ class Delfi(object):
     if not html:
       raise DelfiException(ADDON.getLocalizedString(200).encode('utf-8'))
 
-    regex = 'class="dvideo-container-(\w+)"'
+    regex = 'data-id="(\w+)"'
     for line in re.finditer(regex,html):
       id = line.group(1)
       return 'http://vodrtmp.nh.ee/delfivod/_definst_/%s/%s/smil:stream.smil/playlist.m3u8' % (id[0], id)
