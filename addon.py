@@ -109,7 +109,7 @@ class Delfi(object):
           live_urls.append(stream['data-src'].replace("//","https://"))
     for live_url in live_urls:
       html = self.downloadUrl(live_url)
-      for m in re.findall('#stream=([^\"]+)&',html, re.DOTALL):
+      for m in re.findall('#stream=([^&]+)&',html, re.DOTALL):
         data = json.loads(urllib.unquote(m))
         title = data['title'].replace('+', ' ')
         stream_hu = ''
