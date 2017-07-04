@@ -88,6 +88,10 @@ class Delfi(object):
         item.setProperty('Fanart_Image', FANART)
         items.append((PATH + '?category=%s&page=1' % 'live/sport', item, True))
 
+        item = xbmcgui.ListItem(ADDON.getLocalizedString(30009).encode('utf-8'), iconImage=FANART)
+        item.setProperty('Fanart_Image', FANART)
+        items.append((PATH + '?category=%s&page=1' % 'saated', item, True))
+
         for m in re.finditer(regex, html):
             item = xbmcgui.ListItem(m.group(2), iconImage=FANART)
             item.setProperty('Fanart_Image', FANART)
@@ -150,7 +154,7 @@ class Delfi(object):
 
     def list_videos(self, categoryId, page):
 
-        if "live/" in categoryId:
+        if "live/" in categoryId or "saated" in categoryId:
             url = 'http://tv.%s/%s/?page=%s' % (MAIN_URL, categoryId, page)
         else:
             url = 'http://tv.%s/saated/%s/?page=%s' % (MAIN_URL, categoryId, page)
