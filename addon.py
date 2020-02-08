@@ -66,7 +66,7 @@ class Delfi(object):
                 contents = u.read()
                 u.close()
                 return contents
-            except Exception, ex:
+            except Exception as ex:
                 if retries > 5:
                     raise DelfiException(ex)
 
@@ -100,53 +100,62 @@ class Delfi(object):
         xbmcplugin.endOfDirectory(HANDLE)
 
     def get_live_streams(self):
-        url = 'http://tv.delfi.ee/live'
+        url = 'http://tv.delfi.ee/live/'
+        html = BeautifulSoup(self.download_url(url), 'html.parser')
+        if not html:
+            raise DelfiException(ADDON.getLocalizedString(202).encode('utf-8'))
+        items = list()
+        events = html.find_all(class_='stream-event')
+        for event in events:
+            if event.get('data-dschedule'):
+                #print(event.attrs.get('data-dschedule'), event.text)
+                title = '%s - %s' % (event.a.text, event.find(class_='stream-event__text').text)
+                item = xbmcgui.ListItem(title, iconImage=FANART)
+                item.setProperty('Fanart_Image', FANART)
+                items.append((PATH + '?category=live&event=%s' % event.attrs.get('data-dschedule'), item, True))
+        xbmcplugin.addDirectoryItems(HANDLE, items)
+        xbmcplugin.endOfDirectory(HANDLE)
+
+    def get_live_stream_url(self, event):
+        url = 'https://www.delfi.ee/misc/export/streamblock.php?stream=%s' % event
         buggalo.addExtraData('url', url)
         html = BeautifulSoup(self.download_url(url), 'html.parser')
         if not html:
             raise DelfiException(ADDON.getLocalizedString(202).encode('utf-8'))
 
-        items = list()
-        live_urls = list()
-        urlid = html.find_all(class_="stream-event")
-        for url in urlid:
-            if url.get('data-dschedule-whref'):
-                live_urls.append(url.get('data-dschedule-whref'))
-        for live_url in live_urls:
-            html = self.download_url(live_url)
-            for m in re.findall('#stream=([^&]+)&', html, re.DOTALL):
-                data = json.loads(urllib.unquote(m))
-                title = data['title'].replace('+', ' ')
-                stream_hu = ''
-                stream_lu = ''
-                for streams in data['versions']:
-                    if streams['caption'] == "HQ":
-                        stream_hu = data['rtmp'] + streams['flash']
-                    if streams['caption'] == "LQ":
-                        stream_lu = data['rtmp'] + streams['flash']
+        urlid = html.find_all('script')
+        for live_url in urlid:
+            try:
+                for m in re.findall('#stream=([^&]+)&', str(live_url), re.DOTALL):
+                    data = json.loads(urllib.unquote(m))
+                    title = data['title'].replace('+', ' ')
+                    stream_hu = ''
+                    stream_lu = ''
+                    for streams in data['versions']:
+                        if streams['caption'] == "HQ":
+                            stream_hu = data['rtmp'] + streams['flash']
+                        if streams['caption'] == "LQ":
+                            stream_lu = data['rtmp'] + streams['flash']
 
-                # try to fall back sd if hd url is not available and vice versa
-                if not stream_hu and not stream_lu:
-                    raise DelfiException(ADDON.getLocalizedString(30005).encode('utf-8'))
-                if not stream_hu:
-                    stream_hu = stream_lu
-                if not stream_lu:
-                    stream_lu = stream_hu
+                    # try to fall back sd if hd url is not available and vice versa
+                    if not stream_hu and not stream_lu:
+                        raise DelfiException(ADDON.getLocalizedString(30005).encode('utf-8'))
+                    if not stream_hu:
+                        stream_hu = stream_lu
+                    if not stream_lu:
+                        stream_lu = stream_hu
 
-                if __settings__.getSetting('hd'):
-                    streamurl = stream_hu
-                else:
-                    streamurl = stream_lu
+                    if __settings__.getSetting('hd'):
+                        streamurl = stream_hu
+                    else:
+                        streamurl = stream_lu
+                    return streamurl
+            except:
+                pass
 
-            item = xbmcgui.ListItem(title, iconImage=FANART)
-            item.setProperty('Fanart_Image', FANART)
-            items.append((PATH + '?category=live&url=%s' % streamurl, item, True))
-        xbmcplugin.addDirectoryItems(HANDLE, items)
-        xbmcplugin.endOfDirectory(HANDLE)
-
-    def play_live_stream(self, streamurl):
-        buggalo.addExtraData('url', streamurl)
-
+    def play_live_stream(self, event):
+        buggalo.addExtraData('event', event)
+        streamurl = self.get_live_stream_url(event)
         playlist = xbmc.PlayList(xbmc.PLAYLIST_VIDEO)
         playlist.clear()
         playlist.add(streamurl)
@@ -242,8 +251,8 @@ if __name__ == '__main__':
 
     DelfiAddon = Delfi()
     try:
-        if PARAMS.has_key('category') and PARAMS['category'][0] == 'live' and PARAMS.has_key('url'):
-            DelfiAddon.play_live_stream(PARAMS['url'][0])
+        if PARAMS.has_key('category') and PARAMS['category'][0] == 'live' and PARAMS.has_key('event'):
+            DelfiAddon.play_live_stream(PARAMS['event'][0])
         elif PARAMS.has_key('category') and PARAMS['category'][0] == 'live':
             DelfiAddon.get_live_streams()
         elif PARAMS.has_key('category'):
@@ -253,7 +262,7 @@ if __name__ == '__main__':
         else:
             DelfiAddon.list_channels()
 
-    except DelfiException, ex:
+    except DelfiException as ex:
         DelfiAddon.display_error(str(ex))
     except Exception:
         buggalo.onExceptionRaised()
